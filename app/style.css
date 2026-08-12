@@ -461,7 +461,6 @@ body {
 
 .course-card:hover { box-shadow: var(--shadow-md); }
 .course-card.favourite { border-left-color: var(--amber); background: #fffdf5; }
-.course-card.excluded { opacity: 0.4; }
 .course-card.hidden-course { opacity: 0.45; border-left-color: var(--text-muted); }
 .course-card.already-tracked { border-left-color: var(--green); }
 
@@ -583,7 +582,7 @@ body {
 }
 
 .uni-list-item.favourite { border-left-color: var(--amber); background: #fffdf5; }
-.uni-list-item.excluded { opacity: 0.38; }
+.uni-list-item.selected { border-left-color: var(--blue); background: #f0f7ff; }
 .uni-list-item.dragging { opacity: 0.25; box-shadow: none; }
 .uni-list-item.drag-above { border-top: 2px solid var(--blue); border-radius: 0 var(--radius) var(--radius) 0; }
 

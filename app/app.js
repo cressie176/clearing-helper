@@ -54,7 +54,7 @@ function saveState(patch) {
 let state = {
   myGrades: ['A', 'B', 'B'],
   excludedCourses: [],     // array of course IDs excluded from search results
-  excludedUnis: [],
+  includedUnis: [],        // empty = show all; populated = show only these in search
   uniOrder: {},            // { uniName: preferenceNumber }
   filters: { 'startDate.month': ['September'] },  // default September
   entryReqMax: 128,        // upper bound tariff (ABB = 128); null = any
@@ -73,7 +73,7 @@ function hydrate() {
   // Ensure arrays
   if (!Array.isArray(state.myGrades)) state.myGrades = ['A', 'B', 'B'];
   if (!Array.isArray(state.excludedCourses)) state.excludedCourses = [];
-  if (!Array.isArray(state.excludedUnis)) state.excludedUnis = [];
+  if (!Array.isArray(state.includedUnis)) state.includedUnis = [];
   if (!Array.isArray(state.tracker)) state.tracker = [];
   if (!state.uniOrder) state.uniOrder = {};
   if (!state.filters) state.filters = {};
@@ -88,7 +88,7 @@ function persist() {
   saveState({
     myGrades: state.myGrades,
     excludedCourses: state.excludedCourses,
-    excludedUnis: state.excludedUnis,
+    includedUnis: state.includedUnis,
     uniOrder: state.uniOrder,
     filters: state.filters,
     entryReqMax: state.entryReqMax,
@@ -259,6 +259,15 @@ async function loadUniversities() {
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
+function normalizeUniName(name) {
+  return (name || '').toLowerCase().replace(/^the\s+/, '').replace(/\s+/g, ' ').trim();
+}
+
+function isSelectedUni(uniName) {
+  const n = normalizeUniName(uniName);
+  return state.includedUnis.some(e => normalizeUniName(e) === n);
+}
+
 function myTariff() {
   return gradesToTariff(state.myGrades);
 }
@@ -352,11 +361,9 @@ function renderSearchResults() {
   // Filter: Bachelors only — exclude integrated Masters (MSci etc.)
   results = results.filter(r => !r.qualification || !/master/i.test(r.qualification));
 
-  // Filter: exclude hidden unis — count before removing
-  const showExcluded = document.getElementById('show-excluded')?.checked;
-  const excludedUniCount = results.filter(r => state.excludedUnis.includes(r.uniName)).length;
-  if (!showExcluded) {
-    results = results.filter(r => !state.excludedUnis.includes(r.uniName));
+  // Filter: limit to selected universities (if any have been selected)
+  if (state.includedUnis.length > 0) {
+    results = results.filter(r => isSelectedUni(r.uniName));
   }
 
   // Filter: entry requirement range (A-level req only — tariffMin covers all routes and is unreliable)
@@ -407,7 +414,7 @@ function renderSearchResults() {
 
   const pills = [
     trackedCount ? `<button class="filter-pill" onclick="toggleShowTracked()" title="${state.hideTracked ? 'Click to show' : 'Click to hide'}">${trackedCount} tracked ${state.hideTracked ? '(hidden)' : '(shown)'}</button>` : '',
-    excludedUniCount && !showExcluded ? `<button class="filter-pill" onclick="document.getElementById('show-excluded').click()" title="Click to show excluded">${excludedUniCount} excluded unis hidden</button>` : '',
+    state.includedUnis.length ? `<span class="filter-pill">${state.includedUnis.length} unis selected</span>` : '',
     hiddenCourseCount && !showHidden ? `<button class="filter-pill" onclick="document.getElementById('show-hidden').click()" title="Click to show hidden courses">${hiddenCourseCount} hidden</button>` : '',
   ].filter(Boolean).join('');
 
@@ -452,13 +459,11 @@ function entryReqClass(tariffMin, myTariff) {
 }
 
 function renderCourseCard(r, myTariffPts) {
-  const isExcl = state.excludedUnis.includes(r.uniName);
   const isHidden = state.excludedCourses.includes(r.id);
   const alreadyTracked = isTracked(r.courseCode, r.uniName);
   const prefNum = state.uniOrder[r.uniName];
   const cardClasses = [
     'course-card',
-    isExcl ? 'excluded' : '',
     isHidden ? 'hidden-course' : '',
     alreadyTracked ? 'already-tracked' : '',
   ].filter(Boolean).join(' ');
@@ -532,12 +537,12 @@ function addToTracker(course) {
 
 window.addToTracker = addToTracker;
 
-function toggleExcludeUni(uniName) {
-  const idx = state.excludedUnis.indexOf(uniName);
+function toggleIncludeUni(uniName) {
+  const idx = state.includedUnis.findIndex(e => normalizeUniName(e) === normalizeUniName(uniName));
   if (idx >= 0) {
-    state.excludedUnis.splice(idx, 1);
+    state.includedUnis.splice(idx, 1);
   } else {
-    state.excludedUnis.push(uniName);
+    state.includedUnis.push(uniName);
   }
   persist();
   renderSearchResults();
@@ -572,7 +577,7 @@ function toggleShowTracked() {
 }
 
 window.toggleShowTracked = toggleShowTracked;
-window.toggleExcludeUni = toggleExcludeUni;
+window.toggleIncludeUni = toggleIncludeUni;
 window.toggleExcludeCourse = toggleExcludeCourse;
 
 // ── Filter Chips ──────────────────────────────────────────────────────────────
@@ -659,10 +664,10 @@ async function renderUniversitiesTab() {
 }
 
 function _makeUniItem(u, rank) {
-  const isExcl = state.excludedUnis.includes(u.name);
+  const isSelected = isSelectedUni(u.name);
 
   const div = document.createElement('div');
-  div.className = ['uni-list-item', isExcl ? 'excluded' : ''].filter(Boolean).join(' ');
+  div.className = ['uni-list-item', isSelected ? 'selected' : ''].filter(Boolean).join(' ');
   div.dataset.name = u.name;
   div.draggable = true;
 
@@ -678,10 +683,10 @@ function _makeUniItem(u, rank) {
       ${u.cityDescription ? `<div class="uni-list-desc">${escHtml(u.cityDescription)}</div>` : ''}
     </div>
     <div class="uni-list-actions">
-      <button class="btn ${isExcl ? 'btn-secondary' : 'btn-danger'} btn-sm"
-        onclick="toggleExcludeUni('${escAttr(u.name)}')"
+      <button class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'} btn-sm"
+        onclick="toggleIncludeUni('${escAttr(u.name)}')"
         style="white-space:nowrap">
-        ${isExcl ? 'Include' : 'Exclude'}
+        ${isSelected ? '✓ Selected' : 'Select'}
       </button>
     </div>
   `;
@@ -825,7 +830,7 @@ function renderTrackerCard(t) {
 
       <div class="course-meta" style="margin-bottom:10px">
         ${t.entryReq ? `<span class="meta-chip">${escHtml(t.entryReq)}</span>` : ''}
-        ${t.city ? `<span class="meta-chip">${escHtml(t.city)}${t.region ? `, ${escHtml(t.region)}` : ''}</span>` : ''}
+        ${t.city ? `<a class="meta-chip" style="text-decoration:none;cursor:pointer" href="https://maps.google.com/maps?q=${encodeURIComponent(t.uniName + ', ' + t.city)}&z=6" target="maps">${escHtml(t.city)}${t.region && t.region !== t.city ? `, ${escHtml(t.region)}` : ''}</a>` : ''}
       </div>
 
       ${(t.phone || t.email) ? `
@@ -990,7 +995,6 @@ function init() {
       renderSearchResults();
     });
   }
-  document.getElementById('show-excluded')?.addEventListener('change', renderSearchResults);
   document.getElementById('show-hidden')?.addEventListener('change', renderSearchResults);
 
   // Close modals on backdrop click
