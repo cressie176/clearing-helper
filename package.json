@@ -1,0 +1,9 @@
+{
+  "name": "clearing-helper",
+  "version": "1.0.0",
+  "description": "UCAS Clearing helper",
+  "scripts": {
+    "start": "node launch.js",
+    "update": "git pull && node launch.js"
+  }
+}

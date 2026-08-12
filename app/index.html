@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clearing Helper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="app-header">
+  <div>
+    <h1>Clearing Helper</h1>
+    <div class="subtitle">Psychology degrees · Clearing 2026</div>
+  </div>
+</header>
+
+<!-- ── Status banner ──────────────────────────────────────────────────────── -->
+<div id="status-banner" class="banner info" style="display:none;margin:0;border-radius:0;position:sticky;top:64px;z-index:90"></div>
+
+<!-- ── Tabs ──────────────────────────────────────────────────────────────── -->
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="search" onclick="switchTab('search')">
+    UCAS Search
+  </button>
+  <button class="tab-btn" data-tab="tracker" onclick="switchTab('tracker')">
+    My Applications
+    <span class="tab-badge green" id="tracker-badge" style="display:none">0</span>
+  </button>
+  <button class="tab-btn" data-tab="universities" onclick="switchTab('universities')">
+    Universities
+  </button>
+</nav>
+
+<!-- ══ TAB: Search ══════════════════════════════════════════════════════════ -->
+<div class="tab-panel active" id="tab-search">
+
+  <div class="search-controls">
+    <div class="search-row">
+      <div class="form-group" style="flex:2">
+        <label>Course / Subject</label>
+        <input
+          type="text"
+          id="query-input"
+          class="form-control"
+          value="psychology"
+          placeholder="e.g. psychology"
+        >
+      </div>
+      <button class="btn btn-primary" id="search-btn" onclick="runSearch()" style="align-self:flex-end;padding:10px 24px;font-size:1rem">
+        Search UCAS
+      </button>
+    </div>
+
+    <div id="filters-section" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+      <div class="filter-row" style="margin-bottom:8px">
+        <span class="filter-label">Start</span>
+        <div class="filter-chips">
+          <span class="filter-chip" data-facet="startDate.month" data-value="September" onclick="toggleFilter(this)">September</span>
+          <span class="filter-chip" data-facet="startDate.month" data-value="January" onclick="toggleFilter(this)">January</span>
+        </div>
+      </div>
+      <div class="filter-row" style="margin-bottom:8px">
+        <span class="filter-label">Entry req</span>
+        <select id="filter-entry-max" class="sort-select" onchange="setEntryReqFilter()">
+          <option value="">Any</option>
+          <option value="144">AAA</option>
+          <option value="136">AAB</option>
+          <option value="128">ABB</option>
+          <option value="120">BBB</option>
+          <option value="112">BBC</option>
+          <option value="104">BCC</option>
+          <option value="96">CCC</option>
+        </select>
+        <span style="padding:0 4px;color:var(--text-muted);font-size:0.85rem">–</span>
+        <select id="filter-entry-min" class="sort-select" onchange="setEntryReqFilter()">
+          <option value="">Any</option>
+          <option value="144">AAA</option>
+          <option value="136">AAB</option>
+          <option value="128">ABB</option>
+          <option value="120">BBB</option>
+          <option value="112">BBC</option>
+          <option value="104">BCC</option>
+          <option value="96">CCC</option>
+        </select>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Duration</span>
+        <div class="filter-chips">
+          <span class="filter-chip" data-facet="duration.grouped" data-value="2-3 years" onclick="toggleFilter(this)">2–3 years</span>
+          <span class="filter-chip" data-facet="duration.grouped" data-value="3-4 years" onclick="toggleFilter(this)">3–4 years</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="search-options" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-tracked">
+        Show tracked courses
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-excluded">
+        Show excluded universities
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="show-hidden">
+        Show hidden courses
+      </label>
+    </div>
+
+    <div id="api-status" style="margin-top:12px"></div>
+  </div>
+
+  <div id="search-meta" class="search-meta"></div>
+  <div id="search-results"></div>
+</div>
+
+<!-- ══ TAB: Tracker ════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-tracker">
+  <div class="section-header">
+    <div class="section-title">My Applications Tracker</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="tracker-summary" style="font-size:0.85rem;color:var(--text-muted)"></span>
+    </div>
+  </div>
+
+  <div class="banner info" style="margin-bottom:16px">
+    <strong>How to use:</strong> Search for courses and click "+ Track". Update the status as you call universities. Your progress is saved automatically.
+  </div>
+
+  <div class="filter-row" id="tracker-status-filters" style="padding:0 16px 12px;display:none">
+    <span class="filter-label">Status</span>
+    <div class="filter-chips">
+      <span class="filter-chip" data-status="not-contacted" onclick="toggleTrackerFilter(this)">Not contacted</span>
+      <span class="filter-chip" data-status="contacted" onclick="toggleTrackerFilter(this)">Called</span>
+      <span class="filter-chip" data-status="offer" onclick="toggleTrackerFilter(this)">Offer</span>
+      <span class="filter-chip" data-status="declined" onclick="toggleTrackerFilter(this)">Declined</span>
+      <span class="filter-chip" data-status="accepted" onclick="toggleTrackerFilter(this)">Accepted</span>
+    </div>
+  </div>
+
+  <div id="tracker-list"></div>
+</div>
+
+<!-- ══ TAB: Universities ═══════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-universities">
+  <div class="section-header">
+    <div class="section-title">UK Universities</div>
+    <div style="font-size:0.8rem;color:var(--text-muted)">Rank shown where available · Times Higher Education WUR 2026 Psychology</div>
+  </div>
+
+  <div class="banner info" style="margin-bottom:16px">
+    Drag to reorder by preference — position 1 is your top choice. Star favourites. Excluded universities are greyed out and hidden from search results.
+  </div>
+
+  <div class="uni-list" id="unis-list">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Loading university data...</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ Manual API Config Modal ═══════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="api-config-modal">
+  <div class="modal">
+    <h2>UCAS API Configuration</h2>
+    <p>
+      The UCAS search uses Algolia. Enter the credentials found by the setup script,
+      or get them manually from Chrome DevTools while on the UCAS clearing search page.
+    </p>
+
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Algolia App ID</label>
+      <input type="text" class="form-control" id="config-app-id" placeholder="e.g. ABCDEF1234">
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Algolia API Key (search-only)</label>
+      <input type="text" class="form-control" id="config-api-key" placeholder="e.g. abc123...">
+    </div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label>Index Name</label>
+      <input type="text" class="form-control" id="config-index" placeholder="e.g. courses">
+    </div>
+
+    <div class="banner warning" style="margin-bottom:16px;font-size:0.82rem">
+      <div>
+        <strong>How to find these manually:</strong><br>
+        1. Open the UCAS clearing search in Chrome<br>
+        2. DevTools (F12) → Network → filter by "algolia"<br>
+        3. Wait for a search to fire, click the request<br>
+        4. Copy <code>X-Algolia-Application-Id</code> and <code>X-Algolia-API-Key</code> headers
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeApiConfigModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveApiConfig()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="universities-data.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
