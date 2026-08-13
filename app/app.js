@@ -57,8 +57,8 @@ let state = {
   includedUnis: [],        // empty = show all; populated = show only these in search
   uniOrder: {},            // { uniName: preferenceNumber }
   filters: { 'startDate.month': ['September'] },  // default September
-  entryReqMax: 128,        // upper bound tariff (ABB = 128); null = any
-  entryReqMin: null,       // lower bound tariff; null = any
+  entryReqMax: 'ABB',      // upper bound grade string; null = any
+  entryReqMin: null,       // lower bound grade string; null = any
   hideTracked: true,       // hide tracked courses by default (checkbox inverted in UI)
   trackerStatusFilter: [], // empty = show all; otherwise show only matching statuses
   tracker: [],             // { id, uniName, courseName, courseCode, entryReq, contact, phone, ucasUrl, status, notes, addedAt }
@@ -78,7 +78,10 @@ function hydrate() {
   if (!state.uniOrder) state.uniOrder = {};
   if (!state.filters) state.filters = {};
   if (!state.filters['startDate.month']?.length) state.filters['startDate.month'] = ['September'];
-  if (state.entryReqMax == null) state.entryReqMax = 128;
+  // Migrate old numeric tariff values to grade strings
+  if (typeof state.entryReqMax === 'number') state.entryReqMax = 'ABB';
+  if (typeof state.entryReqMin === 'number') state.entryReqMin = null;
+  if (state.entryReqMax == null) state.entryReqMax = 'ABB';
   if (state.entryReqMin === undefined) state.entryReqMin = null;
   if (state.hideTracked === undefined) state.hideTracked = true;
   if (!Array.isArray(state.trackerStatusFilter)) state.trackerStatusFilter = [];
@@ -155,6 +158,13 @@ async function searchUCAS(query, page = 0) {
   });
   const facetFilters = JSON.stringify(facetFilterGroups);
 
+  // Build numeric tariff filters for server-side pre-filtering
+  const numericFilters = [];
+  const maxTariff = state.entryReqMax ? parseEntryReqTariff(state.entryReqMax) : null;
+  const minTariff = state.entryReqMin ? parseEntryReqTariff(state.entryReqMin) : null;
+  if (maxTariff) numericFilters.push(`ucasTariff.min<=${maxTariff}`);
+  if (minTariff) numericFilters.push(`ucasTariff.min>=${minTariff}`);
+
   const params = [
     `query=${encodeURIComponent(query || 'psychology')}`,
     'hitsPerPage=200',
@@ -162,7 +172,8 @@ async function searchUCAS(query, page = 0) {
     `facetFilters=${encodeURIComponent(facetFilters)}`,
     'filters=NOT%20academicYearId%3A2024%20AND%20NOT%20academicYearId%3A2025%20AND%20NOT%20academicYearId%3A2028%20AND%20NOT%20academicYearId%3A2029%20AND%20NOT%20entryPoints.name%3A%22Foundation%20Year%22',
     'attributesToRetrieve=courseTitle,localTitle,applicationCode,courseId,provider,location,academicEntryRequirements,ucasTariff,duration,studyMode,startDate,outcomeQualification,vacancies',
-  ].join('&');
+    numericFilters.length ? `numericFilters=${encodeURIComponent(JSON.stringify(numericFilters))}` : '',
+  ].filter(Boolean).join('&');
 
   const body = {
     requests: [{
@@ -367,12 +378,14 @@ function renderSearchResults() {
   }
 
   // Filter: entry requirement range (A-level req only — tariffMin covers all routes and is unreliable)
-  if (state.entryReqMax != null || state.entryReqMin != null) {
+  const maxTariff = state.entryReqMax ? parseEntryReqTariff(state.entryReqMax) : null;
+  const minTariff = state.entryReqMin ? parseEntryReqTariff(state.entryReqMin) : null;
+  if (maxTariff != null || minTariff != null) {
     results = results.filter(r => {
       const t = parseEntryReqTariff(r.entryReq);
       if (!t) return true; // no A-level req stated — show it
-      if (state.entryReqMax != null && t > state.entryReqMax) return false;
-      if (state.entryReqMin != null && t < state.entryReqMin) return false;
+      if (maxTariff != null && t > maxTariff) return false;
+      if (minTariff != null && t < minTariff) return false;
       return true;
     });
   }
@@ -597,12 +610,43 @@ function toggleFilter(el) {
   persist();
 }
 
+function syncEntryReqDropdowns() {
+  const maxEl = document.getElementById('filter-entry-max');
+  const minEl = document.getElementById('filter-entry-min');
+  if (!maxEl || !minEl) return;
+  const maxTariff = maxEl.value ? parseEntryReqTariff(maxEl.value) : null;
+  const minTariff = minEl.value ? parseEntryReqTariff(minEl.value) : null;
+  Array.from(minEl.options).forEach(opt => {
+    if (!opt.value) { opt.disabled = false; return; }
+    const t = parseEntryReqTariff(opt.value);
+    opt.disabled = !!(maxTariff && t && t > maxTariff);
+  });
+  Array.from(maxEl.options).forEach(opt => {
+    if (!opt.value) { opt.disabled = false; return; }
+    const t = parseEntryReqTariff(opt.value);
+    opt.disabled = !!(minTariff && t && t < minTariff);
+  });
+}
+
 function setEntryReqFilter() {
   const maxEl = document.getElementById('filter-entry-max');
   const minEl = document.getElementById('filter-entry-min');
-  state.entryReqMax = maxEl?.value ? parseInt(maxEl.value, 10) : null;
-  state.entryReqMin = minEl?.value ? parseInt(minEl.value, 10) : null;
+  let maxVal = maxEl?.value || null;
+  let minVal = minEl?.value || null;
+  // Clamp: if min tariff exceeds max tariff, clear min
+  if (maxVal && minVal) {
+    const maxT = parseEntryReqTariff(maxVal);
+    const minT = parseEntryReqTariff(minVal);
+    if (maxT && minT && minT > maxT) {
+      minVal = null;
+      if (minEl) minEl.value = '';
+    }
+  }
+  state.entryReqMax = maxVal;
+  state.entryReqMin = minVal;
   persist();
+  syncEntryReqDropdowns();
+  renderSearchResults();
 }
 
 function restoreFilterChips() {
@@ -611,9 +655,10 @@ function restoreFilterChips() {
     chip.classList.toggle('active', !!active);
   });
   const maxEl = document.getElementById('filter-entry-max');
-  if (maxEl) maxEl.value = state.entryReqMax != null ? String(state.entryReqMax) : '';
+  if (maxEl) maxEl.value = state.entryReqMax || '';
   const minEl = document.getElementById('filter-entry-min');
-  if (minEl) minEl.value = state.entryReqMin != null ? String(state.entryReqMin) : '';
+  if (minEl) minEl.value = state.entryReqMin || '';
+  syncEntryReqDropdowns();
 }
 
 window.toggleFilter = toggleFilter;
